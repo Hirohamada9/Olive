@@ -1,0 +1,335 @@
+/* Olive v1 — local-only, sync-ready. Data key: olive-v1. No network calls, no external resources. */
+const STORAGE_KEY = "olive-v1";
+const DOMAINS = [
+  ["Move","#dbe7cd"],["Learn","#dde6f0"],["Speak/Create","#f2dfd2"],
+  ["Connect","#f5e3c8"],["Faith","#e8ddf2"],["Work","#e3ddd2"],
+  ["Home","#fde9c8"],["Explore/Play","#d8ece6"],["Rest","#e9e4d8"]
+];
+const PROMPTS = [
+  ["today","Today I…"],["enjoyed","The part I actually enjoyed was…"],
+  ["work","Work today, in one line…"],["learned","One thing I learned / noticed…"],
+  ["faith","A God / faith moment, if any…"],["goalNote","Am I moving closer to a goal? Tell me more…"]
+];
+const uid = (p) => p + "-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2,7);
+const nowISO = () => new Date().toISOString();
+function todayISO(d){
+  const x = d ? new Date(d) : new Date();
+  const y = x.getFullYear(), m = String(x.getMonth()+1).padStart(2,"0"), day = String(x.getDate()).padStart(2,"0");
+  return `${y}-${m}-${day}`;
+}
+function parseDate(s){ const [y,m,d]=s.split("-").map(Number); return new Date(y,m-1,d); }
+function fmtDate(s){ return parseDate(s).toLocaleDateString(undefined,{weekday:"short",day:"numeric",month:"short",year:"numeric"}); }
+function mondayOf(s){
+  const d = parseDate(s); const dow = (d.getDay()+6)%7; d.setDate(d.getDate()-dow); return todayISO(d);
+}
+function addDays(s,n){ const d=parseDate(s); d.setDate(d.getDate()+n); return todayISO(d); }
+function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+
+let store = load();
+let editingTalkId = null;
+function load(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(!raw) return {version:1, days:[], talks:[]};
+    const p = JSON.parse(raw);
+    if(!p || p.version!==1 || !Array.isArray(p.days) || !Array.isArray(p.talks)) return {version:1, days:[], talks:[]};
+    return p;
+  }catch(e){ return {version:1, days:[], talks:[]}; }
+}
+function save(){
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(store));
+  const el = document.getElementById("savedIndicator");
+  if(el) el.textContent = "Saved • " + new Date().toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"});
+}
+function blankDay(date){
+  return {id:"day-"+date, date, domains:[], prompts:{today:"",enjoyed:"",work:"",learned:"",faith:"",goalNote:""}, goalDirection:"", createdAt:nowISO(), updatedAt:nowISO()};
+}
+function getDay(date, create){
+  let d = store.days.find(x=>x.date===date);
+  if(!d && create){ d = blankDay(date); store.days.push(d); }
+  return d || blankDay(date);
+}
+function hasContent(d){
+  return d && (d.domains.length>0 || Object.values(d.prompts||{}).some(v=>String(v||"").trim()) || d.goalDirection);
+}
+function touchToday(){
+  const d = getDay(todayISO(), true); d.updatedAt = nowISO(); return d;
+}
+
+/* Tabs */
+function showTab(name){
+  document.querySelectorAll(".tab").forEach(s=>s.classList.toggle("active", s.id==="tab-"+name));
+  document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("active", b.dataset.tab===name));
+  if(name==="timeline") renderTimeline();
+  if(name==="board") renderBoard();
+  if(name==="talk") renderTalkCandidates();
+  if(name==="insights") renderInsights();
+  window.scrollTo(0,0);
+}
+document.querySelectorAll("nav button").forEach(b=>b.addEventListener("click", ()=>showTab(b.dataset.tab)));
+
+/* Journal */
+function renderJournal(){
+  const t = todayISO();
+  document.getElementById("todayLabel").textContent = fmtDate(t);
+  const day = getDay(t, false);
+  const grid = document.getElementById("domainGrid"); grid.innerHTML = "";
+  DOMAINS.forEach(([name,color])=>{
+    const on = day.domains.includes(name);
+    const b = document.createElement("button");
+    b.type="button"; b.className="domain-btn"+(on?" active":""); b.style.setProperty("--domain", color);
+    b.innerHTML = esc(name) + '<span class="plus">'+(on?"+1 ✓":"tap for +1")+"</span>";
+    b.setAttribute("aria-pressed", on?"true":"false");
+    b.addEventListener("click", ()=>{
+      const d = touchToday();
+      if(d.domains.includes(name)) d.domains = d.domains.filter(x=>x!==name);
+      else d.domains.push(name);
+      save(); renderJournal();
+    });
+    grid.appendChild(b);
+  });
+  document.getElementById("todayCount").textContent = day.domains.length + " of 9 today";
+  // prompts
+  PROMPTS.forEach(([key])=>{
+    const ta = document.querySelector(`[data-prompt="${key}"]`);
+    if(ta && ta.value !== (day.prompts[key]||"")) ta.value = day.prompts[key]||"";
+  });
+  document.querySelectorAll("[data-goal-dir]").forEach(b=>{
+    b.classList.toggle("active", day.goalDirection===b.dataset.goalDir);
+  });
+}
+document.querySelectorAll("[data-prompt]").forEach(ta=>{
+  ta.addEventListener("input", ()=>{
+    const d = touchToday(); d.prompts[ta.dataset.prompt] = ta.value; save();
+  });
+});
+document.querySelectorAll("[data-goal-dir]").forEach(b=>{
+  b.addEventListener("click", ()=>{
+    const d = touchToday();
+    d.goalDirection = (d.goalDirection===b.dataset.goalDir) ? "" : b.dataset.goalDir;
+    save(); renderJournal();
+  });
+});
+
+/* Timeline — past days in reverse order; today is editable via Journal, past days are read-only in v1. */
+function renderTimeline(){
+  const box = document.getElementById("timelineList");
+  const days = store.days.filter(hasContent).sort((a,b)=>b.date.localeCompare(a.date));
+  if(!days.length){ box.innerHTML = '<p class="muted">Nothing journaled yet. Your first day will appear here. Olive starts empty by design.</p>'; return; }
+  box.innerHTML = days.map(d=>{
+    const isToday = d.date===todayISO();
+    const prompts = PROMPTS.filter(([k])=>String(d.prompts[k]||"").trim()).map(([k,label])=>`<p><strong>${esc(label)}</strong><br>${esc(d.prompts[k])}</p>`).join("");
+    const dir = d.goalDirection ? `<p><strong>Goal direction:</strong> ${esc(d.goalDirection)}</p>` : "";
+    return `<article class="card"><h3>${esc(fmtDate(d.date))}${isToday?" — today":""}</h3>
+      <p>${d.domains.length? d.domains.map(x=>`<span class="pill">${esc(x)} +1</span>`).join(" ") : '<span class="muted">No domain +1s that day.</span>'}</p>
+      ${prompts}${dir}
+      ${isToday?'<button class="btn smallbtn secondary" data-edit-today="1">Edit today in Journal</button>':'<p class="muted small">Past days are read-only in v1.</p>'}
+      </article>`;
+  }).join("");
+  box.querySelectorAll("[data-edit-today]").forEach(b=>b.addEventListener("click", ()=>showTab("journal")));
+}
+
+/* Board */
+function weekDates(monday){ return [0,1,2,3,4,5,6].map(i=>addDays(monday,i)); }
+function renderBoard(){
+  const mon = mondayOf(todayISO()); const thisWeek = weekDates(mon); const lastWeek = weekDates(addDays(mon,-7));
+  document.getElementById("weekLabel").textContent = fmtDate(mon) + " – " + fmtDate(thisWeek[6]);
+  const byDate = Object.fromEntries(store.days.map(d=>[d.date,d]));
+  let head = "<tr><th>Domain</th>" + thisWeek.map(d=>`<th>${parseDate(d).toLocaleDateString(undefined,{weekday:"narrow"})}<br><span class="small">${parseDate(d).getDate()}</span></th>`).join("") + "</tr>";
+  let rows = DOMAINS.map(([name])=>{
+    return "<tr><td>"+esc(name)+"</td>" + thisWeek.map(d=>{
+      const day = byDate[d]; const on = day && day.domains.includes(name);
+      return `<td class="mark">${on?"●":"—"}</td>`;
+    }).join("") + "</tr>";
+  }).join("");
+  document.getElementById("weekGrid").innerHTML = "<table>"+head+rows+"</table>";
+  const countIn = (dates,domain)=>dates.reduce((n,d)=>n+((byDate[d]&&byDate[d].domains.includes(domain))?1:0),0);
+  document.getElementById("compareTable").innerHTML = "<table><tr><th>Domain</th><th>This week</th><th>Last week</th><th>Change</th></tr>" +
+    DOMAINS.map(([name])=>{
+      const a=countIn(thisWeek,name), b=countIn(lastWeek,name), diff=a-b;
+      return `<tr><td>${esc(name)}</td><td>${a}</td><td>${b}</td><td>${diff>0?"+"+diff:diff}</td></tr>`;
+    }).join("") + "</table>";
+  const journaledThis = thisWeek.filter(d=>hasContent(byDate[d])).length;
+  const journaledLast = lastWeek.filter(d=>hasContent(byDate[d])).length;
+  document.getElementById("boardSummary").textContent = `Days journaled: ${journaledThis} this week, ${journaledLast} last week.`;
+}
+
+/* Talk */
+function momentCandidates(){
+  const out = [];
+  for(let i=6;i>=0;i--){
+    const date = addDays(todayISO(), -i); const d = store.days.find(x=>x.date===date);
+    if(!d) continue;
+    [["enjoyed","Enjoyed"],["learned","Learned / noticed"],["today","Today"],["faith","Faith moment"],["goalNote","Goal note"]].forEach(([k,label])=>{
+      const t = String(d.prompts[k]||"").trim();
+      if(t) out.push({date, label, text:t});
+    });
+  }
+  return out;
+}
+function renderTalkCandidates(){
+  const sel = document.getElementById("momentSelect"); const cands = momentCandidates();
+  sel.innerHTML = '<option value="">Choose a moment from the past week, or write your own below</option>' +
+    cands.map((c,i)=>`<option value="${i}">${esc(c.date)} — ${esc(c.label)}: ${esc(c.text.slice(0,80))}</option>`).join("");
+  sel.onchange = ()=>{
+    if(sel.value==="") return;
+    const c = cands[Number(sel.value)];
+    const mf = document.getElementById("talkMoment");
+    if(!mf.value.trim()) mf.value = c.text;
+    document.getElementById("talkSourceDate").value = c.date;
+    updateTalkPreview();
+  };
+  renderTalkList();
+}
+function updateTalkPreview(){
+  const hook = document.getElementById("talkHook").value.trim();
+  const moment = document.getElementById("talkMoment").value.trim();
+  const meaning = document.getElementById("talkMeaning").value.trim();
+  const close = document.getElementById("talkClose").value.trim();
+  const parts = [];
+  if(hook) parts.push(hook);
+  if(moment) parts.push("The moment: " + moment);
+  if(meaning) parts.push("What it means: " + meaning);
+  if(close) parts.push(close);
+  const script = parts.join("\n\n");
+  document.getElementById("talkScript").textContent = script || "Your read-back script will appear here as you fill in the fields above.";
+  const words = script ? script.split(/\s+/).filter(Boolean).length : 0;
+  const secs = Math.round(words/130*60);
+  document.getElementById("talkEstimate").textContent = words + " words • about " + Math.floor(secs/60) + " min " + String(secs%60).padStart(2,"0") + " sec at ~130 words per minute";
+}
+["talkHook","talkMoment","talkMeaning","talkClose"].forEach(id=>document.getElementById(id).addEventListener("input", updateTalkPreview));
+function renderTalkList(){
+  const box = document.getElementById("talkList");
+  const talks = [...store.talks].sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt));
+  if(!talks.length){ box.innerHTML = '<p class="muted">No saved talks yet.</p>'; return; }
+  box.innerHTML = talks.map(t=>`<div class="talk-item"><strong>${esc(t.sourceDate||"")}</strong> — ${esc((t.hook||t.moment||"").slice(0,100))}
+    <div class="row" style="margin-top:8px"><button class="btn smallbtn secondary" data-load="${t.id}">Load</button>
+    <button class="btn smallbtn" data-practice="${t.id}">Practice +1</button>
+    <span>Reps: ${t.reps||0}</span>
+    <button class="btn smallbtn secondary" data-del="${t.id}">Delete</button></div></div>`).join("");
+  box.querySelectorAll("[data-load]").forEach(b=>b.addEventListener("click", ()=>{
+    const t = store.talks.find(x=>x.id===b.dataset.load); if(!t) return;
+    editingTalkId = t.id;
+    document.getElementById("talkHook").value = t.hook||""; document.getElementById("talkMoment").value = t.moment||"";
+    document.getElementById("talkMeaning").value = t.meaning||""; document.getElementById("talkClose").value = t.close||"";
+    document.getElementById("talkSourceDate").value = t.sourceDate||todayISO(); updateTalkPreview();
+  }));
+  box.querySelectorAll("[data-practice]").forEach(b=>b.addEventListener("click", ()=>{
+    const t = store.talks.find(x=>x.id===b.dataset.practice); if(!t) return;
+    t.reps = (t.reps||0)+1; t.updatedAt = nowISO(); save(); renderTalkList();
+  }));
+  box.querySelectorAll("[data-del]").forEach(b=>b.addEventListener("click", ()=>{
+    store.talks = store.talks.filter(x=>x.id!==b.dataset.del); save(); renderTalkList();
+  }));
+}
+document.getElementById("saveTalkBtn").addEventListener("click", ()=>{
+  const hook = document.getElementById("talkHook").value.trim();
+  const moment = document.getElementById("talkMoment").value.trim();
+  const meaning = document.getElementById("talkMeaning").value.trim();
+  const close = document.getElementById("talkClose").value.trim();
+  if(!hook && !moment && !meaning && !close){ alert("Add at least one part of the talk first."); return; }
+  const sourceDate = document.getElementById("talkSourceDate").value || todayISO();
+  if(editingTalkId){
+    const t = store.talks.find(x=>x.id===editingTalkId);
+    if(t){ t.hook=hook; t.moment=moment; t.meaning=meaning; t.close=close; t.sourceDate=sourceDate; t.updatedAt=nowISO(); }
+    editingTalkId = null;
+  } else {
+    store.talks.push({id:uid("talk"), sourceDate, hook, moment, meaning, close, reps:0, createdAt:nowISO(), updatedAt:nowISO()});
+  }
+  save(); renderTalkList();
+  document.getElementById("talkSavedNote").textContent = "Talk saved.";
+});
+document.getElementById("newTalkBtn").addEventListener("click", ()=>{
+  editingTalkId = null;
+  ["talkHook","talkMoment","talkMeaning","talkClose"].forEach(id=>document.getElementById(id).value="");
+  document.getElementById("talkSourceDate").value = todayISO(); updateTalkPreview();
+});
+
+/* Insights — summaries are counts; patterns are always labelled suggestions, never facts. */
+function renderInsights(){
+  const days = store.days.filter(hasContent);
+  const mon = mondayOf(todayISO()); const thisWeek = weekDates(mon);
+  const monthPrefix = todayISO().slice(0,7);
+  const countDomains = (list)=>{ const c={}; list.forEach(d=>d.domains.forEach(x=>c[x]=(c[x]||0)+1)); return c; };
+  const topOf = (c)=>{ const e=Object.entries(c).sort((a,b)=>b[1]-a[1]); return e.length? e[0][0]+" ("+e[0][1]+")" : "—"; };
+  const weekDays = days.filter(d=>thisWeek.includes(d.date));
+  const monthDays = days.filter(d=>d.date.startsWith(monthPrefix));
+  const weekCounts = countDomains(weekDays), monthCounts = countDomains(monthDays);
+  const weekTotal = Object.values(weekCounts).reduce((a,b)=>a+b,0), monthTotal = Object.values(monthCounts).reduce((a,b)=>a+b,0);
+  document.getElementById("insightsSummary").innerHTML =
+    `<p><strong>This week:</strong> ${weekDays.length} day(s) journaled, ${weekTotal} domain +1(s). Most tapped: ${esc(topOf(weekCounts))}.</p>` +
+    `<p><strong>This month:</strong> ${monthDays.length} day(s) journaled, ${monthTotal} domain +1(s). Most tapped: ${esc(topOf(monthCounts))}.</p>`;
+  const box = document.getElementById("insightsPatterns");
+  if(days.length<3){
+    box.innerHTML = '<p class="muted">Not enough days yet for patterns. Keep journaling — suggestions will appear here once you have a few days, and they will always be labelled as suggestions to confirm or correct.</p>';
+    return;
+  }
+  const sugg = [];
+  if(topOf(monthCounts)!=="—") sugg.push(`Possible pattern — confirm or correct: ${topOf(monthCounts)} is your most tapped domain this month.`);
+  const last7 = []; for(let i=6;i>=0;i--) last7.push(addDays(todayISO(),-i));
+  const c7 = countDomains(days.filter(d=>last7.includes(d.date)));
+  Object.entries(c7).filter(([,n])=>n>=4).forEach(([name,n])=>sugg.push(`Possible pattern — confirm or correct: you tapped ${name} on ${n} of the last 7 days.`));
+  if(!sugg.length) sugg.push("Possible pattern — confirm or correct: no single domain stands out in the last 7 days yet.");
+  box.innerHTML = sugg.map(s=>`<div class="callout">${esc(s)}</div>`).join("") +
+    '<p class="muted small">These are suggestions only, not facts — especially with only a few days of data. Confirm or correct them in your own reflection.</p>';
+}
+
+/* Export / Import */
+function download(filename, text, type){
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([text], {type})); a.download = filename; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 1000);
+}
+document.getElementById("exportMdBtn").addEventListener("click", ()=>{
+  const days = store.days.filter(hasContent).sort((a,b)=>a.date.localeCompare(b.date));
+  let md = "# Olive — journal export\n\n";
+  if(!days.length) md += "No entries yet.\n";
+  days.forEach(d=>{
+    md += `## ${d.date}\n\n`;
+    if(d.domains.length) md += `Domains: ${d.domains.map(x=>x+" +1").join(", ")}\n\n`;
+    PROMPTS.forEach(([k,label])=>{ if(String(d.prompts[k]||"").trim()) md += `**${label}**\n${d.prompts[k]}\n\n`; });
+    if(d.goalDirection) md += `Goal direction: ${d.goalDirection}\n\n`;
+  });
+  if(store.talks.length){
+    md += "# Talks\n\n";
+    store.talks.forEach(t=>{ md += `## ${t.sourceDate} (reps: ${t.reps||0})\n\n${[t.hook,t.moment,t.meaning,t.close].filter(Boolean).join("\n\n")}\n\n`; });
+  }
+  download("olive-journal.md", md, "text/markdown");
+});
+document.getElementById("exportJsonBtn").addEventListener("click", ()=>{
+  download("olive-backup.json", JSON.stringify(store, null, 2), "application/json");
+});
+document.getElementById("importFile").addEventListener("change", async (e)=>{
+  const f = e.target.files[0]; if(!f) return;
+  try{
+    const imp = JSON.parse(await f.text());
+    if(!imp || imp.version!==1 || !Array.isArray(imp.days) || !Array.isArray(imp.talks)) throw new Error("bad format");
+    let added=0, kept=0, replaced=0;
+    imp.days.forEach(iday=>{
+      if(!iday || !iday.date || !iday.id) return;
+      const ex = store.days.find(x=>x.id===iday.id || x.date===iday.date);
+      if(!ex){ store.days.push(iday); added++; }
+      else if(String(iday.updatedAt||"") > String(ex.updatedAt||"")){ Object.assign(ex, iday); replaced++; }
+      else kept++;
+    });
+    imp.talks.forEach(italk=>{
+      if(!italk || !italk.id) return;
+      const ex = store.talks.find(x=>x.id===italk.id);
+      if(!ex){ store.talks.push(italk); added++; }
+      else {
+        const reps = Math.max(ex.reps||0, italk.reps||0);
+        if(String(italk.updatedAt||"") > String(ex.updatedAt||"")) Object.assign(ex, italk);
+        ex.reps = reps; replaced++;
+      }
+    });
+    save(); renderJournal(); renderTimeline();
+    document.getElementById("importNote").textContent = `Imported: ${added} new, ${replaced} updated to a newer version, ${kept} kept (your existing entry was newer). Practice reps were kept at the higher count.`;
+  }catch(err){
+    document.getElementById("importNote").textContent = "Import failed: that file does not look like an Olive v1 backup. Nothing was changed.";
+  }
+  e.target.value = "";
+});
+
+/* Init */
+renderJournal(); updateTalkPreview();
+document.getElementById("yearLabel").textContent = new Date().getFullYear();

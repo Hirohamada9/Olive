@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Olive — Daily journal and speaking</title>
+<meta name="description" content="Olive: a private daily journal and 2-minute speaking practice app. Local-only in v1.">
+<meta name="theme-color" content="#f7efe0">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png" sizes="192x192" type="image/png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <div class="mark" aria-hidden="true">
+    <svg width="40" height="40" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+      <path d="M24 6 C 14 14, 12 28, 24 42 C 36 28, 34 14, 24 6 Z" fill="#7a9a5a"/>
+      <path d="M24 10 L 24 40" stroke="#5f7a4e" stroke-width="2"/>
+      <ellipse cx="17" cy="20" rx="5" ry="3" fill="#a8bd7e" transform="rotate(-30 17 20)"/>
+      <ellipse cx="31" cy="26" rx="5" ry="3" fill="#a8bd7e" transform="rotate(30 31 26)"/>
+    </svg>
+  </div>
+  <div>
+    <h1>Olive</h1>
+    <p class="subtitle">Daily journal &amp; 2-minute speaking practice</p>
+  </div>
+</header>
+
+<main>
+  <section id="tab-journal" class="tab active">
+    <div class="card">
+      <h2>Today</h2>
+      <p class="muted" id="todayLabel"></p>
+      <p>Life board — tap a domain for +1. Tap again to clear it. Empty is not a failure.</p>
+      <div class="domain-grid" id="domainGrid"></div>
+      <p class="muted" id="todayCount"></p>
+    </div>
+    <div class="card">
+      <h2>Journal</h2>
+      <p class="muted">Optional prompts. Everything saves as you type. You can edit today until the day ends.</p>
+      <label for="p-today">Today I…</label>
+      <textarea id="p-today" data-prompt="today" placeholder="Today I…"></textarea>
+      <label for="p-enjoyed">The part I actually enjoyed was…</label>
+      <textarea id="p-enjoyed" data-prompt="enjoyed" placeholder="The part I actually enjoyed was…"></textarea>
+      <label for="p-work">Work today, in one line…</label>
+      <textarea id="p-work" data-prompt="work" placeholder="Work today, in one line…"></textarea>
+      <label for="p-learned">One thing I learned / noticed…</label>
+      <textarea id="p-learned" data-prompt="learned" placeholder="One thing I learned / noticed…"></textarea>
+      <label for="p-faith">A God / faith moment, if any…</label>
+      <textarea id="p-faith" data-prompt="faith" placeholder="A God / faith moment, if any…"></textarea>
+      <label>Am I moving closer to a goal?</label>
+      <div class="seg" role="group" aria-label="Goal direction">
+        <button type="button" data-goal-dir="closer">Closer</button>
+        <button type="button" data-goal-dir="drifting">Drifting</button>
+        <button type="button" data-goal-dir="neither">Neither</button>
+      </div>
+      <label for="p-goal">Tell me more…</label>
+      <textarea id="p-goal" data-prompt="goalNote" placeholder="Tell me more…"></textarea>
+      <p><span class="saved" id="savedIndicator">Not saved yet — start typing or tap a domain.</span></p>
+    </div>
+    <div class="card">
+      <h2>Take your entries with you</h2>
+      <p class="muted">Markdown is for reading and portability. JSON is the full backup for a future move to cloud sync.</p>
+      <div class="row">
+        <button class="btn" id="exportMdBtn" type="button">Download Markdown</button>
+        <button class="btn secondary" id="exportJsonBtn" type="button">Download JSON backup</button>
+      </div>
+      <hr>
+      <label for="importFile">Import an Olive JSON backup</label>
+      <input id="importFile" type="file" accept="application/json,.json">
+      <p class="muted small" id="importNote">Import merges by date and ID. A newer entry replaces an older one; your existing entry is kept if it is newer. Practice reps are kept at the higher count.</p>
+    </div>
+  </section>
+
+  <section id="tab-timeline" class="tab">
+    <div class="card">
+      <h2>Timeline</h2>
+      <p class="muted">Past days, newest first. Today can be edited in Journal. Past days are read-only in v1.</p>
+    </div>
+    <div id="timelineList"></div>
+  </section>
+
+  <section id="tab-board" class="tab">
+    <div class="card">
+      <h2>Board</h2>
+      <p class="muted" id="weekLabel"></p>
+      <p class="muted" id="boardSummary"></p>
+      <div class="week-grid" id="weekGrid"></div>
+      <h3>You vs last week</h3>
+      <div id="compareTable"></div>
+    </div>
+  </section>
+
+  <section id="tab-talk" class="tab">
+    <div class="card">
+      <h2>2-minute talk</h2>
+      <p class="muted">Pick a moment from the past week, then build it as Hook / Moment / Meaning / Close.</p>
+      <label for="momentSelect">Moment from the past week</label>
+      <select id="momentSelect"></select>
+      <input type="hidden" id="talkSourceDate">
+      <label for="talkHook">Hook — why should anyone care?</label>
+      <textarea id="talkHook" placeholder="Hook"></textarea>
+      <label for="talkMoment">Moment, with feeling</label>
+      <textarea id="talkMoment" placeholder="Moment, with feeling"></textarea>
+      <label for="talkMeaning">Meaning — what did it change?</label>
+      <textarea id="talkMeaning" placeholder="Meaning"></textarea>
+      <label for="talkClose">Close</label>
+      <textarea id="talkClose" placeholder="Close"></textarea>
+      <h3>Read-back script</h3>
+      <p id="talkScript" style="white-space:pre-wrap"></p>
+      <p class="muted" id="talkEstimate"></p>
+      <div class="row">
+        <button class="btn" id="saveTalkBtn" type="button">Save talk</button>
+        <button class="btn secondary" id="newTalkBtn" type="button">New talk</button>
+      </div>
+      <p class="muted" id="talkSavedNote"></p>
+    </div>
+    <div class="card">
+      <h2>Saved talks</h2>
+      <div id="talkList"></div>
+    </div>
+  </section>
+
+  <section id="tab-insights" class="tab">
+    <div class="card">
+      <h2>Insights</h2>
+      <p class="muted">Counts from your own entries. Patterns below are suggestions only — confirm or correct them, never take them as facts, especially with only a few days of data.</p>
+      <div id="insightsSummary"></div>
+      <h3>Suggested patterns</h3>
+      <div id="insightsPatterns"></div>
+    </div>
+  </section>
+
+  <p class="muted small" style="text-align:center">Olive v1 — local-only on this device, sync-ready for later. © <span id="yearLabel"></span></p>
+</main>
+
+<nav aria-label="Main navigation">
+  <button type="button" data-tab="journal" class="active">Journal</button>
+  <button type="button" data-tab="timeline">Timeline</button>
+  <button type="button" data-tab="board">Board</button>
+  <button type="button" data-tab="talk">Talk</button>
+  <button type="button" data-tab="insights">Insights</button>
+</nav>
+
+<script src="app.js"></script>
+<script>
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", function () {
+    navigator.serviceWorker.register("sw.js").catch(function () {});
+  });
+}
+</script>
+</body>
+</html>
