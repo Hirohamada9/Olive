@@ -107,7 +107,8 @@ function renderJournal(){
     const on = day.domains.includes(name);
     const b = document.createElement("button");
     b.type="button"; b.className="domain-btn"+(on?" active":""); b.style.setProperty("--domain", color);
-    b.innerHTML = esc(name) + '<span class="plus">'+(on?"+1 ✓":"tap for +1")+"</span>";
+    const icons = {Move:"🏃", Learn:"📖", "Speak/Create":"🎤", Connect:"🤝", Faith:"🙏", Work:"💼", Home:"🏠", "Explore/Play":"🧭", Rest:"🌙"};
+    b.innerHTML = '<span class="domain-icon">'+(icons[name]||"•")+'</span>' + esc(name) + '<span class="plus">'+(on?"+1 ✓":"tap for +1")+"</span>";
     b.setAttribute("aria-pressed", on?"true":"false");
     b.addEventListener("click", ()=>{
       const poseMap = {Move:"move", Learn:"learning", "Speak/Create":"speak", Connect:"connect", Faith:"faith", Work:"work", Home:"home", "Explore/Play":"explore", Rest:"rest"};
@@ -166,26 +167,29 @@ document.querySelectorAll("[data-jump-board]").forEach(b=>b.addEventListener("cl
 
 /* Avatar companion — inline SVG, no photos, pose by topic */
 const AVATAR_POSES = {
-  listening:{caption:"Listening with you", glasses:false, book:false, laptop:false, mic:false, eyes:"open"},
-  learning:{caption:"Reading under a lamp", glasses:true, book:true, laptop:false, mic:false, eyes:"open"},
-  faith:{caption:"Praying, eyes closed", glasses:false, book:false, laptop:false, mic:false, eyes:"closed"},
-  work:{caption:"Working at my desk", glasses:true, book:false, laptop:true, mic:false, eyes:"open"},
-  speak:{caption:"Holding the mic", glasses:false, book:false, laptop:false, mic:true, eyes:"open"},
-  move:{caption:"Stretching", glasses:false, book:false, laptop:false, mic:false, eyes:"open"},
-  connect:{caption:"Waving hello", glasses:false, book:false, laptop:false, mic:false, eyes:"open"},
-  home:{caption:"Tidying up", glasses:false, book:false, laptop:false, mic:false, eyes:"open"},
-  explore:{caption:"Out exploring", glasses:false, book:false, laptop:false, mic:false, eyes:"open"},
-  rest:{caption:"Resting too", glasses:false, book:false, laptop:false, mic:false, eyes:"closed"},
-  goal:{caption:"Thinking ahead", glasses:true, book:false, laptop:false, mic:false, eyes:"open"}
+  listening:{caption:"Listening with you", glasses:false, lampBook:false, laptop:false, mic:false, map:false, broom:false, pillow:false, thought:false, arms:"down", legs:"stand", eyes:"open", tilt:"0deg"},
+  learning:{caption:"Reading under a lamp", glasses:true, lampBook:true, laptop:false, mic:false, map:false, broom:false, pillow:false, thought:false, arms:"down", legs:"stand", eyes:"open", tilt:"-4deg"},
+  faith:{caption:"Kneeling, praying, eyes closed", glasses:false, lampBook:false, laptop:false, mic:false, map:false, broom:false, pillow:false, thought:false, arms:"pray", legs:"kneel", eyes:"closed", tilt:"8deg"},
+  work:{caption:"Working at my desk", glasses:true, lampBook:false, laptop:true, mic:false, map:false, broom:false, pillow:false, thought:false, arms:"down", legs:"stand", eyes:"open", tilt:"0deg"},
+  speak:{caption:"Holding the mic", glasses:false, lampBook:false, laptop:false, mic:true, map:false, broom:false, pillow:false, thought:false, arms:"down", legs:"stand", eyes:"open", tilt:"0deg"},
+  move:{caption:"Stretching", glasses:false, lampBook:false, laptop:false, mic:false, map:false, broom:false, pillow:false, thought:false, arms:"up", legs:"stand", eyes:"open", tilt:"0deg"},
+  connect:{caption:"Waving hello", glasses:false, lampBook:false, laptop:false, mic:false, map:false, broom:false, pillow:false, thought:false, arms:"up", legs:"stand", eyes:"open", tilt:"0deg"},
+  home:{caption:"Tidying up", glasses:false, lampBook:false, laptop:false, mic:false, map:false, broom:true, pillow:false, thought:false, arms:"down", legs:"stand", eyes:"open", tilt:"0deg"},
+  explore:{caption:"Out exploring", glasses:false, lampBook:false, laptop:false, mic:false, map:true, broom:false, pillow:false, thought:false, arms:"down", legs:"stand", eyes:"open", tilt:"0deg"},
+  rest:{caption:"Resting too", glasses:false, lampBook:false, laptop:false, mic:false, map:false, broom:false, pillow:true, thought:false, arms:"down", legs:"lie", eyes:"closed", tilt:"0deg"},
+  goal:{caption:"Thinking ahead", glasses:true, lampBook:false, laptop:false, mic:false, map:false, broom:false, pillow:false, thought:true, arms:"down", legs:"stand", eyes:"open", tilt:"-4deg"}
 };
 function setAvatarPose(key){
   const p = AVATAR_POSES[key] || AVATAR_POSES.listening;
   const cap = document.getElementById("avatarCaption"); if(cap) cap.textContent = p.caption;
   const show = (id,on)=>{ const el=document.getElementById(id); if(el) el.style.display = on?"":"none"; };
-  show("avatarGlasses", p.glasses); show("avatarPropBook", p.book); show("avatarPropLaptop", p.laptop); show("avatarPropMic", p.mic);
+  show("avatarGlasses", p.glasses); show("avatarLampBook", p.lampBook); show("avatarLaptop", p.laptop); show("avatarMic", p.mic); show("avatarMap", p.map); show("avatarBroom", p.broom); show("avatarPillow", p.pillow); show("avatarThought", p.thought);
+  show("avatarArmsDown", p.arms==="down"); show("avatarArmsUp", p.arms==="up"); show("avatarArmsPray", p.arms==="pray");
+  show("avatarLegsStand", p.legs==="stand"); show("avatarLegsKneel", p.legs==="kneel"); show("avatarLegsLie", p.legs==="lie");
+  const head = document.getElementById("avatarHead"); if(head){ head.style.transform = `rotate(${p.tilt})`; head.style.transformOrigin = "60px 38px"; }
   const eyeL = document.getElementById("avatarEyeL"), eyeR = document.getElementById("avatarEyeR");
   if(p.eyes==="closed"){ if(eyeL) eyeL.setAttribute("r","1"); if(eyeR) eyeR.setAttribute("r","1"); }
-  else { if(eyeL) eyeL.setAttribute("r","2.5"); if(eyeR) eyeR.setAttribute("r","2.5"); }
+  else { if(eyeL) eyeL.setAttribute("r","2.8"); if(eyeR) eyeR.setAttribute("r","2.8"); }
 }
 function avatarWave(){
   const svg = document.getElementById("avatarSvg"); if(!svg) return;
