@@ -28,14 +28,28 @@
 
 <main>
   <section id="tab-journal" class="tab active">
-    <div class="card">
+    <div class="sticky-save" id="stickySaved" role="status">Not saved yet — start typing or tap a domain.</div>
+    <div class="jump-menu" aria-label="Jump to a section in Journal">
+      <button type="button" data-jump-target="lifeBoardCard">Life board</button>
+      <button type="button" data-jump-target="journalCard">Journal</button>
+      <button type="button" data-jump-target="goalCheck">Goal check</button>
+      <button type="button" data-jump-target="weekGlanceCard">This week</button>
+      <button type="button" data-jump-target="exportCard">Export</button>
+    </div>
+    <div class="card" id="lifeBoardCard">
       <h2>Today</h2>
       <p class="muted" id="todayLabel"></p>
       <p>Life board — tap a domain for +1. Tap again to clear it. Empty is not a failure.</p>
       <div class="domain-grid" id="domainGrid"></div>
       <p class="muted" id="todayCount"></p>
     </div>
-    <div class="card">
+    <div class="card" id="weekGlanceCard">
+      <h2>This week at a glance</h2>
+      <p class="muted" id="weekGlanceSummary"></p>
+      <div id="weekGlanceGrid"></div>
+      <p><button class="btn smallbtn secondary" type="button" data-jump-board="1">View full Board</button></p>
+    </div>
+    <div class="card" id="journalCard">
       <h2>Journal</h2>
       <p class="muted">Optional prompts. Everything saves as you type. You can edit today until the day ends.</p>
       <label for="p-today">Today I…</label>
@@ -49,7 +63,7 @@
       <label for="p-faith">A God / faith moment, if any…</label>
       <textarea id="p-faith" data-prompt="faith" placeholder="A God / faith moment, if any…"></textarea>
       <label>Am I moving closer to a goal?</label>
-      <div class="seg" role="group" aria-label="Goal direction">
+      <div class="seg" id="goalCheck" role="group" aria-label="Goal direction">
         <button type="button" data-goal-dir="closer">Closer</button>
         <button type="button" data-goal-dir="drifting">Drifting</button>
         <button type="button" data-goal-dir="neither">Neither</button>
@@ -58,13 +72,15 @@
       <textarea id="p-goal" data-prompt="goalNote" placeholder="Tell me more…"></textarea>
       <p><span class="saved" id="savedIndicator">Not saved yet — start typing or tap a domain.</span></p>
     </div>
-    <div class="card">
+    <div class="card" id="exportCard">
       <h2>Take your entries with you</h2>
       <p class="muted">Markdown is for reading and portability. JSON is the full backup for a future move to cloud sync.</p>
       <div class="row">
         <button class="btn" id="exportMdBtn" type="button">Download Markdown</button>
         <button class="btn secondary" id="exportJsonBtn" type="button">Download JSON backup</button>
+        <button class="btn secondary" id="emailDraftBtn" type="button">Prepare email draft</button>
       </div>
+      <p class="muted small" id="emailDraftNote">A static site cannot create a Gmail draft by itself. Tapping “Prepare email draft” downloads your Markdown and shows the exact note to send to Muse in chat — Muse will then create a Gmail draft to shawnlimsx94@gmail.com with that file attached. A later login / backend could make this one-tap in the app, but that is not v1.1.</p>
       <hr>
       <label for="importFile">Import an Olive JSON backup</label>
       <input id="importFile" type="file" accept="application/json,.json">
@@ -111,9 +127,11 @@
       <p class="muted" id="talkEstimate"></p>
       <div class="row">
         <button class="btn" id="saveTalkBtn" type="button">Save talk</button>
+        <button class="btn secondary" id="copyTalkBtn" type="button">Copy script</button>
         <button class="btn secondary" id="newTalkBtn" type="button">New talk</button>
       </div>
       <p class="muted" id="talkSavedNote"></p>
+      <p><span class="saved" id="talkSavedIndicator">Talk draft not saved yet.</span></p>
     </div>
     <div class="card">
       <h2>Saved talks</h2>
@@ -126,6 +144,11 @@
       <h2>Insights</h2>
       <p class="muted">Counts from your own entries. Patterns below are suggestions only — confirm or correct them, never take them as facts, especially with only a few days of data.</p>
       <div id="insightsSummary"></div>
+      <h3>This year</h3>
+      <div id="yearInsights"></div>
+      <h3>Checkpoints for deep reflection</h3>
+      <p class="muted small">These checkpoints are prompts, not facts. Confirm a pattern if it feels true, or correct it if it does not. Your answer is saved on this device.</p>
+      <div id="checkpoints"></div>
       <h3>Suggested patterns</h3>
       <div id="insightsPatterns"></div>
     </div>
@@ -133,6 +156,33 @@
 
   <p class="muted small" style="text-align:center">Olive v1 — local-only on this device, sync-ready for later. © <span id="yearLabel"></span></p>
 </main>
+
+<div id="avatarWrap" aria-label="Olive avatar companion">
+  <div id="avatarCard">
+    <button type="button" id="avatarCollapse" aria-label="Collapse avatar">—</button>
+    <button type="button" id="avatarTap" aria-label="Tap avatar to wave">
+      <svg id="avatarSvg" width="96" height="128" viewBox="0 0 96 128" role="img" aria-label="Olive avatar">
+        <g id="avatarBody">
+          <ellipse cx="48" cy="112" rx="28" ry="8" fill="#e6d7bc"/>
+          <rect x="32" y="62" width="32" height="48" rx="12" fill="#8a6642"/>
+          <circle cx="48" cy="38" r="20" fill="#f2c9a0"/>
+          <path id="avatarHair" d="M28 36 Q26 12 48 10 Q70 12 68 36 Q62 22 48 20 Q34 22 28 36 Z" fill="#2b2118"/>
+          <circle id="avatarEyeL" cx="41" cy="38" r="2.5" fill="#2b2118"/>
+          <circle id="avatarEyeR" cx="55" cy="38" r="2.5" fill="#2b2118"/>
+          <path d="M40 50 Q48 55 56 50" stroke="#2b2118" stroke-width="2" fill="none" stroke-linecap="round"/>
+          <path d="M44 46 h8" stroke="#b08a6a" stroke-width="1.5"/>
+          <g id="avatarGlasses" style="display:none"><circle cx="41" cy="38" r="7" fill="none" stroke="#3d2b1f" stroke-width="2"/><circle cx="55" cy="38" r="7" fill="none" stroke="#3d2b1f" stroke-width="2"/><line x1="48" y1="38" x2="48" y2="38" stroke="#3d2b1f"/></g>
+          <g id="avatarPropBook" style="display:none"><rect x="58" y="78" width="22" height="16" rx="2" fill="#7a9a5a"/><rect x="58" y="78" width="11" height="16" fill="#a8bd7e"/></g>
+          <g id="avatarPropLaptop" style="display:none"><rect x="20" y="88" width="30" height="18" rx="2" fill="#3d2b1f"/></g>
+          <g id="avatarPropMic" style="display:none"><rect x="62" y="58" width="10" height="18" rx="5" fill="#3d2b1f"/><line x1="67" y1="76" x2="67" y2="86" stroke="#3d2b1f" stroke-width="2"/></g>
+        </g>
+      </svg>
+      <div id="avatarCaption">Listening with you</div>
+      <div id="avatarBubble" class="hidden">Hi, I’m listening.</div>
+    </button>
+  </div>
+  <button type="button" id="avatarChip" class="hidden" aria-label="Show avatar">Olive</button>
+</div>
 
 <nav aria-label="Main navigation">
   <button type="button" data-tab="journal" class="active">Journal</button>

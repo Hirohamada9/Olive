@@ -32,14 +32,43 @@ function load(){
     const raw = localStorage.getItem(STORAGE_KEY);
     if(!raw) return {version:1, days:[], talks:[]};
     const p = JSON.parse(raw);
-    if(!p || p.version!==1 || !Array.isArray(p.days) || !Array.isArray(p.talks)) return {version:1, days:[], talks:[]};
+    if(!p || p.version!==1 || !Array.isArray(p.days) || !Array.isArray(p.talks)) return {version:1, days:[], talks:[], checkpointResponses:[], talkDraft:null};
+    if(!Array.isArray(p.checkpointResponses)) p.checkpointResponses = [];
+    if(!("talkDraft" in p)) p.talkDraft = null;
     return p;
   }catch(e){ return {version:1, days:[], talks:[]}; }
 }
 function save(){
   localStorage.setItem(STORAGE_KEY, JSON.stringify(store));
+  const t = "Saved • " + new Date().toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"});
   const el = document.getElementById("savedIndicator");
-  if(el) el.textContent = "Saved • " + new Date().toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"});
+  if(el) el.textContent = t;
+  const st = document.getElementById("stickySaved");
+  if(st) st.textContent = t;
+}
+function saveTalkDraft(){
+  const draft = {
+    hook: document.getElementById("talkHook").value,
+    moment: document.getElementById("talkMoment").value,
+    meaning: document.getElementById("talkMeaning").value,
+    close: document.getElementById("talkClose").value,
+    sourceDate: document.getElementById("talkSourceDate").value || todayISO(),
+    updatedAt: nowISO()
+  };
+  if(!draft.hook && !draft.moment && !draft.meaning && !draft.close) return;
+  store.talkDraft = draft;
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(store));
+  const el = document.getElementById("talkSavedIndicator");
+  if(el) el.textContent = "Talk draft autosaved • " + new Date().toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"});
+}
+function loadTalkDraft(){
+  const d = store.talkDraft; if(!d) return;
+  if(!document.getElementById("talkHook").value) document.getElementById("talkHook").value = d.hook||"";
+  if(!document.getElementById("talkMoment").value) document.getElementById("talkMoment").value = d.moment||"";
+  if(!document.getElementById("talkMeaning").value) document.getElementById("talkMeaning").value = d.meaning||"";
+  if(!document.getElementById("talkClose").value) document.getElementById("talkClose").value = d.close||"";
+  if(d.sourceDate) document.getElementById("talkSourceDate").value = d.sourceDate;
+  updateTalkPreview();
 }
 function blankDay(date){
   return {id:"day-"+date, date, domains:[], prompts:{today:"",enjoyed:"",work:"",learned:"",faith:"",goalNote:""}, goalDirection:"", createdAt:nowISO(), updatedAt:nowISO()};
@@ -81,6 +110,8 @@ function renderJournal(){
     b.innerHTML = esc(name) + '<span class="plus">'+(on?"+1 ✓":"tap for +1")+"</span>";
     b.setAttribute("aria-pressed", on?"true":"false");
     b.addEventListener("click", ()=>{
+      const poseMap = {Move:"move", Learn:"learning", "Speak/Create":"speak", Connect:"connect", Faith:"faith", Work:"work", Home:"home", "Explore/Play":"explore", Rest:"rest"};
+      setAvatarPose(poseMap[name]||"listening");
       const d = touchToday();
       if(d.domains.includes(name)) d.domains = d.domains.filter(x=>x!==name);
       else d.domains.push(name);
@@ -89,6 +120,7 @@ function renderJournal(){
     grid.appendChild(b);
   });
   document.getElementById("todayCount").textContent = day.domains.length + " of 9 today";
+  renderWeekGlance();
   // prompts
   PROMPTS.forEach(([key])=>{
     const ta = document.querySelector(`[data-prompt="${key}"]`);
@@ -109,6 +141,72 @@ document.querySelectorAll("[data-goal-dir]").forEach(b=>{
     d.goalDirection = (d.goalDirection===b.dataset.goalDir) ? "" : b.dataset.goalDir;
     save(); renderJournal();
   });
+});
+
+function renderWeekGlance(){
+  const mon = mondayOf(todayISO()); const dates = weekDates(mon);
+  const byDate = Object.fromEntries(store.days.map(d=>[d.date,d]));
+  const journaled = dates.filter(d=>hasContent(byDate[d])).length;
+  const total = dates.reduce((n,d)=>n+((byDate[d]&&byDate[d].domains.length)||0),0);
+  const s = document.getElementById("weekGlanceSummary");
+  if(s) s.textContent = `${fmtDate(mon)} – ${fmtDate(dates[6])} • ${journaled} day(s) journaled this week • ${total} domain +1(s)`;
+  const g = document.getElementById("weekGlanceGrid");
+  if(!g) return;
+  g.className = "week-glance";
+  g.innerHTML = dates.map(d=>{
+    const day = byDate[d]; const n = day ? day.domains.length : 0;
+    const isT = d===todayISO();
+    return `<div class="${isT?"today":""}">${parseDate(d).toLocaleDateString(undefined,{weekday:"short"})}<br><strong>${parseDate(d).getDate()}</strong><br>${n} +1</div>`;
+  }).join("");
+}
+document.querySelectorAll("[data-jump-target]").forEach(b=>b.addEventListener("click", ()=>{
+  const el = document.getElementById(b.dataset.jumpTarget); if(el) el.scrollIntoView({behavior:"smooth", block:"start"});
+}));
+document.querySelectorAll("[data-jump-board]").forEach(b=>b.addEventListener("click", ()=>showTab("board")));
+
+/* Avatar companion — inline SVG, no photos, pose by topic */
+const AVATAR_POSES = {
+  listening:{caption:"Listening with you", glasses:false, book:false, laptop:false, mic:false, eyes:"open"},
+  learning:{caption:"Reading under a lamp", glasses:true, book:true, laptop:false, mic:false, eyes:"open"},
+  faith:{caption:"Praying, eyes closed", glasses:false, book:false, laptop:false, mic:false, eyes:"closed"},
+  work:{caption:"Working at my desk", glasses:true, book:false, laptop:true, mic:false, eyes:"open"},
+  speak:{caption:"Holding the mic", glasses:false, book:false, laptop:false, mic:true, eyes:"open"},
+  move:{caption:"Stretching", glasses:false, book:false, laptop:false, mic:false, eyes:"open"},
+  connect:{caption:"Waving hello", glasses:false, book:false, laptop:false, mic:false, eyes:"open"},
+  home:{caption:"Tidying up", glasses:false, book:false, laptop:false, mic:false, eyes:"open"},
+  explore:{caption:"Out exploring", glasses:false, book:false, laptop:false, mic:false, eyes:"open"},
+  rest:{caption:"Resting too", glasses:false, book:false, laptop:false, mic:false, eyes:"closed"},
+  goal:{caption:"Thinking ahead", glasses:true, book:false, laptop:false, mic:false, eyes:"open"}
+};
+function setAvatarPose(key){
+  const p = AVATAR_POSES[key] || AVATAR_POSES.listening;
+  const cap = document.getElementById("avatarCaption"); if(cap) cap.textContent = p.caption;
+  const show = (id,on)=>{ const el=document.getElementById(id); if(el) el.style.display = on?"":"none"; };
+  show("avatarGlasses", p.glasses); show("avatarPropBook", p.book); show("avatarPropLaptop", p.laptop); show("avatarPropMic", p.mic);
+  const eyeL = document.getElementById("avatarEyeL"), eyeR = document.getElementById("avatarEyeR");
+  if(p.eyes==="closed"){ if(eyeL) eyeL.setAttribute("r","1"); if(eyeR) eyeR.setAttribute("r","1"); }
+  else { if(eyeL) eyeL.setAttribute("r","2.5"); if(eyeR) eyeR.setAttribute("r","2.5"); }
+}
+function avatarWave(){
+  const svg = document.getElementById("avatarSvg"); if(!svg) return;
+  svg.classList.remove("waving"); void svg.offsetWidth; svg.classList.add("waving");
+  const b = document.getElementById("avatarBubble");
+  if(b){ b.classList.remove("hidden"); b.textContent = "Hi — I’m here, keep going."; setTimeout(()=>b.classList.add("hidden"), 2500); }
+}
+document.getElementById("avatarTap")?.addEventListener("click", avatarWave);
+document.getElementById("avatarCollapse")?.addEventListener("click", (e)=>{
+  e.stopPropagation();
+  document.getElementById("avatarCard").style.display = "none";
+  document.getElementById("avatarChip").classList.remove("hidden");
+});
+document.getElementById("avatarChip")?.addEventListener("click", ()=>{
+  document.getElementById("avatarCard").style.display = "";
+  document.getElementById("avatarChip").classList.add("hidden");
+});
+document.querySelectorAll("[data-prompt]").forEach(ta=>{
+  const map = {today:"listening", enjoyed:"listening", work:"work", learned:"learning", faith:"faith", goalNote:"goal"};
+  ta.addEventListener("focus", ()=>{ document.body.classList.add("avatar-typing"); setAvatarPose(map[ta.dataset.prompt]||"listening"); });
+  ta.addEventListener("blur", ()=>document.body.classList.remove("avatar-typing"));
 });
 
 /* Timeline — past days in reverse order; today is editable via Journal, past days are read-only in v1. */
@@ -197,7 +295,16 @@ function updateTalkPreview(){
   const secs = Math.round(words/130*60);
   document.getElementById("talkEstimate").textContent = words + " words • about " + Math.floor(secs/60) + " min " + String(secs%60).padStart(2,"0") + " sec at ~130 words per minute";
 }
-["talkHook","talkMoment","talkMeaning","talkClose"].forEach(id=>document.getElementById(id).addEventListener("input", updateTalkPreview));
+["talkHook","talkMoment","talkMeaning","talkClose"].forEach(id=>document.getElementById(id).addEventListener("input", ()=>{ updateTalkPreview(); saveTalkDraft(); }));
+document.getElementById("copyTalkBtn")?.addEventListener("click", async ()=>{
+  updateTalkPreview();
+  const txt = document.getElementById("talkScript").textContent || "";
+  try{ await navigator.clipboard.writeText(txt); document.getElementById("talkSavedNote").textContent = "Script copied."; }
+  catch(e){
+    const ta = document.createElement("textarea"); ta.value = txt; document.body.appendChild(ta); ta.select(); document.execCommand("copy"); ta.remove();
+    document.getElementById("talkSavedNote").textContent = "Script copied.";
+  }
+});
 function renderTalkList(){
   const box = document.getElementById("talkList");
   const talks = [...store.talks].sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt));
@@ -236,11 +343,12 @@ document.getElementById("saveTalkBtn").addEventListener("click", ()=>{
   } else {
     store.talks.push({id:uid("talk"), sourceDate, hook, moment, meaning, close, reps:0, createdAt:nowISO(), updatedAt:nowISO()});
   }
-  save(); renderTalkList();
+  store.talkDraft = null; save(); renderTalkList();
   document.getElementById("talkSavedNote").textContent = "Talk saved.";
+  const ti = document.getElementById("talkSavedIndicator"); if(ti) ti.textContent = "Talk saved.";
 });
 document.getElementById("newTalkBtn").addEventListener("click", ()=>{
-  editingTalkId = null;
+  editingTalkId = null; store.talkDraft = null;
   ["talkHook","talkMoment","talkMeaning","talkClose"].forEach(id=>document.getElementById(id).value="");
   document.getElementById("talkSourceDate").value = todayISO(); updateTalkPreview();
 });
@@ -259,6 +367,15 @@ function renderInsights(){
   document.getElementById("insightsSummary").innerHTML =
     `<p><strong>This week:</strong> ${weekDays.length} day(s) journaled, ${weekTotal} domain +1(s). Most tapped: ${esc(topOf(weekCounts))}.</p>` +
     `<p><strong>This month:</strong> ${monthDays.length} day(s) journaled, ${monthTotal} domain +1(s). Most tapped: ${esc(topOf(monthCounts))}.</p>`;
+  // Yearly insights
+  const yearPrefix = todayISO().slice(0,4);
+  const yearDays = days.filter(d=>d.date.startsWith(yearPrefix));
+  const yearCounts = countDomains(yearDays);
+  const yearTotal = Object.values(yearCounts).reduce((a,b)=>a+b,0);
+  const yEl = document.getElementById("yearInsights");
+  if(yEl) yEl.innerHTML = `<p><strong>This year (${yearPrefix}):</strong> ${yearDays.length} day(s) journaled, ${yearTotal} domain +1(s), ${store.talks.length} talk(s) saved. Most tapped: ${esc(topOf(yearCounts))}.</p>`;
+  // Checkpoints
+  renderCheckpoints(days, weekDays, monthDays, yearDays);
   const box = document.getElementById("insightsPatterns");
   if(days.length<3){
     box.innerHTML = '<p class="muted">Not enough days yet for patterns. Keep journaling — suggestions will appear here once you have a few days, and they will always be labelled as suggestions to confirm or correct.</p>';
@@ -274,13 +391,45 @@ function renderInsights(){
     '<p class="muted small">These are suggestions only, not facts — especially with only a few days of data. Confirm or correct them in your own reflection.</p>';
 }
 
+function renderCheckpoints(days, weekDays, monthDays, yearDays){
+  const box = document.getElementById("checkpoints"); if(!box) return;
+  const resp = Object.fromEntries((store.checkpointResponses||[]).map(r=>[r.id, r]));
+  const quiet = DOMAINS.map(([n])=>n).filter(n=>{
+    const c = days.filter(d=>d.domains.includes(n)).length;
+    return days.length>=7 && c===0;
+  });
+  const items = [
+    {id:"weekly", period:"Weekly", text:"This week, what actually changed, and what stayed the same? What do you want to carry into next week?"},
+    {id:"monthly", period:"Monthly", text:"This month, which domains lit up, and which went quiet? Is that a choice, or drift?"},
+    {id:"yearly", period:"Yearly", text:"This year so far, what are you moving closer to, and what has not moved at all? What is one honest next step?"},
+  ];
+  if(quiet.length) items.push({id:"quiet", period:"Quiet domains", text:`Possible checkpoint — confirm or correct: ${quiet.join(", ")} ${quiet.length===1?"has":"have"} not been tapped in your journaled days. Does that feel like a gap, or simply not a priority right now?`});
+  box.innerHTML = items.map(it=>{
+    const r = resp[it.id];
+    const status = r ? `<p class="muted small">You marked this: ${esc(r.response)}${r.note? " — "+esc(r.note):""}</p>` : "";
+    return `<div class="checkpoint"><strong>${esc(it.period)} checkpoint</strong><p>${esc(it.text)}</p><div class="row"><button class="btn smallbtn" data-check-confirm="${it.id}">Confirm</button><button class="btn smallbtn secondary" data-check-correct="${it.id}">Correct</button></div>${status}</div>`;
+  }).join("");
+  box.querySelectorAll("[data-check-confirm]").forEach(b=>b.addEventListener("click", ()=>{
+    saveCheckpointResponse(b.dataset.checkConfirm, "confirmed"); renderInsights();
+  }));
+  box.querySelectorAll("[data-check-correct]").forEach(b=>b.addEventListener("click", ()=>{
+    saveCheckpointResponse(b.dataset.checkCorrect, "corrected"); renderInsights();
+  }));
+}
+function saveCheckpointResponse(id, response){
+  if(!Array.isArray(store.checkpointResponses)) store.checkpointResponses = [];
+  const ex = store.checkpointResponses.find(r=>r.id===id);
+  if(ex){ ex.response = response; ex.updatedAt = nowISO(); } else { store.checkpointResponses.push({id, response, updatedAt: nowISO()}); }
+  save();
+}
+
 /* Export / Import */
 function download(filename, text, type){
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([text], {type})); a.download = filename; a.click();
   setTimeout(()=>URL.revokeObjectURL(a.href), 1000);
 }
-document.getElementById("exportMdBtn").addEventListener("click", ()=>{
+function buildMarkdown(){
   const days = store.days.filter(hasContent).sort((a,b)=>a.date.localeCompare(b.date));
   let md = "# Olive — journal export\n\n";
   if(!days.length) md += "No entries yet.\n";
@@ -294,7 +443,17 @@ document.getElementById("exportMdBtn").addEventListener("click", ()=>{
     md += "# Talks\n\n";
     store.talks.forEach(t=>{ md += `## ${t.sourceDate} (reps: ${t.reps||0})\n\n${[t.hook,t.moment,t.meaning,t.close].filter(Boolean).join("\n\n")}\n\n`; });
   }
-  download("olive-journal.md", md, "text/markdown");
+  return md;
+}
+document.getElementById("exportMdBtn").addEventListener("click", ()=>{
+  download("olive-journal.md", buildMarkdown(), "text/markdown");
+});
+document.getElementById("emailDraftBtn")?.addEventListener("click", async ()=>{
+  download("olive-journal.md", buildMarkdown(), "text/markdown");
+  const note = "Hi Muse, please create a Gmail draft to shawnlimsx94@gmail.com with my Olive journal Markdown export attached (file: olive-journal.md, just downloaded). Subject: Olive journal export. Do not send it, draft only.";
+  try{ await navigator.clipboard.writeText(note); }catch(e){}
+  const el = document.getElementById("emailDraftNote");
+  if(el) el.textContent = "Markdown downloaded, and the draft note above was copied (if clipboard allowed). Paste it to Muse in chat and Muse will create a Gmail draft to shawnlimsx94@gmail.com — draft only, not sent. A static site cannot create that Gmail draft by itself.";
 });
 document.getElementById("exportJsonBtn").addEventListener("click", ()=>{
   download("olive-backup.json", JSON.stringify(store, null, 2), "application/json");
@@ -331,5 +490,5 @@ document.getElementById("importFile").addEventListener("change", async (e)=>{
 });
 
 /* Init */
-renderJournal(); updateTalkPreview();
+renderJournal(); updateTalkPreview(); loadTalkDraft(); setAvatarPose("listening");
 document.getElementById("yearLabel").textContent = new Date().getFullYear();
