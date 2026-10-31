@@ -22,7 +22,7 @@
   </div>
   <div>
     <h1>Olive</h1>
-    <p class="subtitle">Daily journal &amp; 2-minute speaking practice <span class="version-pill">v1.2</span></p>
+    <p class="subtitle">Daily journal &amp; 2-minute speaking practice <span class="version-pill">v1.3</span></p>
   </div>
 </header>
 
@@ -35,6 +35,17 @@
       <button type="button" data-jump-target="goalCheck">Goal check</button>
       <button type="button" data-jump-target="weekGlanceCard">This week</button>
       <button type="button" data-jump-target="exportCard">Export</button>
+    </div>
+    <div class="greeting" id="greetingCard">
+      <h2 id="greetingTitle">Good morning, Shawn</h2>
+      <p class="muted" id="greetingDate"></p>
+      <p>Today is a new page.</p>
+    </div>
+    <div class="glance-cards" id="glanceCards"></div>
+    <div class="card continue-card hidden" id="continueCard">
+      <h2>Continue writing</h2>
+      <p class="muted">You have an entry in progress for today.</p>
+      <p><button class="btn" type="button" data-jump-target="journalCard">Continue in Journal</button></p>
     </div>
     <div class="card hero-card" id="heroCard" aria-label="Olive illustration">
       <svg viewBox="0 0 320 120" role="img" aria-label="A quiet morning scene: sun, an olive tree, an open book and a warm drink">
@@ -110,6 +121,8 @@
       <h2>Timeline</h2>
       <p class="muted">Past days, newest first. Today can be edited in Journal. Past days are read-only in v1.</p>
     </div>
+    <div class="timeline-strip" id="timelineStrip"></div>
+    <p class="muted small" id="timelineFilterNote"></p>
     <div id="timelineList"></div>
   </section>
 
@@ -171,6 +184,12 @@
       <h2>Insights</h2>
       <p class="muted">Counts from your own entries. Patterns below are suggestions only — confirm or correct them, never take them as facts, especially with only a few days of data.</p>
       <div id="insightsSummary"></div>
+      <h3>Your week, at a glance</h3>
+      <div class="insights-visuals">
+        <div class="donut-wrap"><div class="donut" id="insightsDonut"></div><div id="insightsDonutLegend"></div></div>
+        <div id="insightsBars"></div>
+        <div id="insightsStreak"></div>
+      </div>
       <h3>This year</h3>
       <div id="yearInsights"></div>
       <h3>Checkpoints for deep reflection</h3>
@@ -181,7 +200,7 @@
     </div>
   </section>
 
-  <p class="muted small" style="text-align:center">Olive v1.2 — local-only on this device, sync-ready for later. © <span id="yearLabel"></span></p>
+  <p class="muted small" style="text-align:center">Olive v1.3 — local-only on this device, sync-ready for later. © <span id="yearLabel"></span></p>
 </main>
 
 <div id="avatarWrap" aria-label="Olive avatar companion">
@@ -255,6 +274,7 @@
   <button type="button" data-tab="talk">Talk</button>
   <button type="button" data-tab="insights">Insights</button>
 </nav>
+<button type="button" id="navPlus" aria-label="Go to today's Journal">+</button>
 
 <script src="app.js"></script>
 <script>

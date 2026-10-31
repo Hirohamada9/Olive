@@ -121,6 +121,7 @@ function renderJournal(){
     grid.appendChild(b);
   });
   document.getElementById("todayCount").textContent = day.domains.length + " of 9 today";
+  renderGreetingAndGlance(day);
   renderWeekGlance();
   // prompts
   PROMPTS.forEach(([key])=>{
@@ -144,6 +145,19 @@ document.querySelectorAll("[data-goal-dir]").forEach(b=>{
   });
 });
 
+function renderGreetingAndGlance(day){
+  const h = new Date().getHours();
+  const greet = h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
+  const gt = document.getElementById("greetingTitle"); if(gt) gt.textContent = greet + ", Shawn";
+  const gd = document.getElementById("greetingDate"); if(gd) gd.textContent = fmtDate(todayISO());
+  const mon = mondayOf(todayISO()); const week = weekDates(mon);
+  const weekJournaled = week.filter(d=>hasContent(store.days.find(x=>x.date===d))).length;
+  const anyPrompt = PROMPTS.some(([k])=>String(day.prompts[k]||"").trim());
+  const gc = document.getElementById("glanceCards");
+  if(gc) gc.innerHTML = `<div class="glance-card"><strong>${day.domains.length} / 9</strong><span>Domains today</span></div><div class="glance-card"><strong>${weekJournaled}</strong><span>Days this week</span></div><div class="glance-card"><strong>${store.talks.length}</strong><span>Talks saved</span></div>`;
+  const cc = document.getElementById("continueCard");
+  if(cc) cc.classList.toggle("hidden", !anyPrompt);
+}
 function renderWeekGlance(){
   const mon = mondayOf(todayISO()); const dates = weekDates(mon);
   const byDate = Object.fromEntries(store.days.map(d=>[d.date,d]));
@@ -164,6 +178,7 @@ document.querySelectorAll("[data-jump-target]").forEach(b=>b.addEventListener("c
   const el = document.getElementById(b.dataset.jumpTarget); if(el) el.scrollIntoView({behavior:"smooth", block:"start"});
 }));
 document.querySelectorAll("[data-jump-board]").forEach(b=>b.addEventListener("click", ()=>showTab("board")));
+document.getElementById("navPlus")?.addEventListener("click", ()=>{ showTab("journal"); const el=document.getElementById("journalCard"); if(el) el.scrollIntoView({behavior:"smooth", block:"start"}); });
 
 /* Avatar companion — inline SVG, no photos, pose by topic */
 const AVATAR_POSES = {
@@ -214,9 +229,26 @@ document.querySelectorAll("[data-prompt]").forEach(ta=>{
 });
 
 /* Timeline — past days in reverse order; today is editable via Journal, past days are read-only in v1. */
+let timelineFilterDate = null;
 function renderTimeline(){
+  const strip = document.getElementById("timelineStrip");
+  if(strip){
+    const mon = mondayOf(todayISO()); const week = weekDates(mon);
+    const byDate = Object.fromEntries(store.days.map(d=>[d.date,d]));
+    strip.innerHTML = week.map(d=>{
+      const day = byDate[d]; const journaled = hasContent(day);
+      const sel = timelineFilterDate===d ? " selected" : "";
+      const j = journaled ? " journaled" : "";
+      return `<button type="button" class="${sel}${j}" data-strip-date="${d}">${parseDate(d).toLocaleDateString(undefined,{weekday:"short"})}<br><strong>${parseDate(d).getDate()}</strong><br>${journaled?"●":"—"}</button>`;
+    }).join("") + `<button type="button" data-strip-date="">Show all</button>`;
+    strip.querySelectorAll("[data-strip-date]").forEach(b=>b.addEventListener("click", ()=>{ timelineFilterDate = b.dataset.stripDate || null; renderTimeline(); }));
+  }
+  const note = document.getElementById("timelineFilterNote");
+  if(note) note.textContent = timelineFilterDate ? `Showing ${fmtDate(timelineFilterDate)} only. Tap Show all to see every day.` : "";
   const box = document.getElementById("timelineList");
-  const days = store.days.filter(hasContent).sort((a,b)=>b.date.localeCompare(a.date));
+  const allDays = store.days.filter(hasContent).sort((a,b)=>b.date.localeCompare(a.date));
+  const days = timelineFilterDate ? allDays.filter(d=>d.date===timelineFilterDate) : allDays;
+  if(timelineFilterDate && !days.length){ box.innerHTML = '<p class="muted">No entry on that day yet.</p>'; return; }
   if(!days.length){ box.innerHTML = '<p class="muted">Nothing journaled yet. Your first day will appear here. Olive starts empty by design.</p>'; return; }
   box.innerHTML = days.map(d=>{
     const isToday = d.date===todayISO();
@@ -371,6 +403,43 @@ function renderInsights(){
   document.getElementById("insightsSummary").innerHTML =
     `<p><strong>This week:</strong> ${weekDays.length} day(s) journaled, ${weekTotal} domain +1(s). Most tapped: ${esc(topOf(weekCounts))}.</p>` +
     `<p><strong>This month:</strong> ${monthDays.length} day(s) journaled, ${monthTotal} domain +1(s). Most tapped: ${esc(topOf(monthCounts))}.</p>`;
+  // Visuals: donut, top bars, streak — all from real week counts, no fake data
+  const domainColor = Object.fromEntries(DOMAINS);
+  const donutEl = document.getElementById("insightsDonut");
+  const legendEl = document.getElementById("insightsDonutLegend");
+  if(donutEl && legendEl){
+    if(weekTotal){
+      let acc = 0; const segs = Object.entries(weekCounts).map(([n,c])=>{
+        const s = acc / weekTotal * 360; acc += c; const e = acc / weekTotal * 360;
+        return `${domainColor[n]||"#6b4a2f"} ${s}deg ${e}deg`;
+      }).join(", ");
+      donutEl.style.background = `conic-gradient(${segs})`;
+      legendEl.innerHTML = Object.entries(weekCounts).sort((a,b)=>b[1]-a[1]).map(([n,c])=>`<p style="margin:4px 0"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${domainColor[n]||"#6b4a2f"}"></span> ${esc(n)} — ${c} (${Math.round(c/weekTotal*100)}%)</p>`).join("");
+    } else {
+      donutEl.style.background = "#e6d7bc";
+      legendEl.innerHTML = '<p class="muted">No domain +1s this week yet.</p>';
+    }
+  }
+  const barsEl = document.getElementById("insightsBars");
+  if(barsEl){
+    const top = Object.entries(weekCounts).sort((a,b)=>b[1]-a[1]).slice(0,5);
+    barsEl.innerHTML = '<h4 style="margin:6px 0">Top domains this week</h4>' + (top.length ? top.map(([n,c])=>{
+      const max = top[0][1]||1; const w = Math.round(c/max*100);
+      return `<div class="bar-row"><span>${esc(n)}</span><div class="bar-track"><div class="bar-fill" style="width:${w}%"></div></div><span>${c}</span></div>`;
+    }).join("") : '<p class="muted">No domain +1s this week yet.</p>');
+  }
+  const streakEl = document.getElementById("insightsStreak");
+  if(streakEl){
+    let streak = 0; let cursor = todayISO();
+    if(!hasContent(store.days.find(x=>x.date===cursor))) cursor = addDays(cursor, -1);
+    while(hasContent(store.days.find(x=>x.date===cursor))){ streak++; cursor = addDays(cursor, -1); }
+    const mon = mondayOf(todayISO()); const week = weekDates(mon);
+    const byDate = Object.fromEntries(store.days.map(d=>[d.date,d]));
+    streakEl.innerHTML = `<h4 style="margin:6px 0">Your streak — ${streak} day(s)</h4><div class="streak-dots">` + week.map(d=>{
+      const filled = hasContent(byDate[d]); const isT = d===todayISO();
+      return `<div class="streak-dot${filled?" filled":""}${isT?" today":""}" title="${esc(fmtDate(d))}">${parseDate(d).toLocaleDateString(undefined,{weekday:"narrow"})}</div>`;
+    }).join("") + `</div><p class="muted small">A streak counts consecutive days with a journal entry, ending today or yesterday.</p>`;
+  }
   // Yearly insights
   const yearPrefix = todayISO().slice(0,4);
   const yearDays = days.filter(d=>d.date.startsWith(yearPrefix));

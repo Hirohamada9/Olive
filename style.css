@@ -82,3 +82,32 @@ body{padding-bottom:220px}
 body.avatar-typing #avatarWrap{width:72px}
 body.avatar-typing #avatarSvg{width:64px;height:96px}
 .domain-icon{font-size:22px;display:block;line-height:1.2}
+
+body{padding-bottom:250px}
+.greeting{padding:6px 4px 12px}
+.greeting h2{font-size:28px;margin:0}
+.glance-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:8px 0 14px}
+.glance-card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:12px;box-shadow:var(--shadow)}
+.glance-card strong{font-size:22px;display:block}
+.glance-card span{font-size:13px;color:var(--muted)}
+.continue-card.hidden{display:none}
+.timeline-strip{display:flex;gap:8px;overflow-x:auto;padding:8px 2px;margin:6px 0}
+.timeline-strip button{flex:0 0 auto;border:1.5px solid var(--line);background:var(--card);border-radius:14px;padding:8px 10px;min-height:52px;cursor:pointer}
+.timeline-strip button.selected{background:var(--brown);color:#fffaf0;border-color:var(--brown)}
+.timeline-strip button.journaled{border-color:var(--green)}
+.insights-visuals{display:grid;gap:14px}
+.donut-wrap{display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+.donut{width:120px;height:120px;border-radius:50%;background:#e6d7bc;position:relative;flex:0 0 auto}
+.donut::after{content:"";position:absolute;inset:26px;background:var(--card);border-radius:50%}
+.bar-row{display:grid;grid-template-columns:110px 1fr 28px;gap:8px;align-items:center;margin:6px 0;font-size:14px}
+.bar-track{background:#efe6cf;border-radius:999px;height:12px;overflow:hidden}
+.bar-fill{height:100%;background:var(--brown);border-radius:999px}
+.streak-dots{display:flex;gap:6px;flex-wrap:wrap}
+.streak-dot{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;border:1.5px solid var(--line);background:var(--card);font-size:13px}
+.streak-dot.filled{background:var(--brown);color:#fffaf0;border-color:var(--brown)}
+.streak-dot.today{border-width:2.5px}
+nav{left:12px;right:12px;bottom:12px;background:var(--brown);border-radius:999px;padding:8px;box-shadow:0 8px 20px rgba(80,55,25,.25)}
+nav button{color:#f7efe0}
+nav button.active{background:#fffaf0;color:var(--brown)}
+#navPlus{position:fixed;left:50%;transform:translateX(-50%);bottom:86px;z-index:31;width:56px;height:56px;border-radius:50%;background:var(--brown);color:#fffaf0;font-size:30px;line-height:1;border:3px solid #fffaf0;box-shadow:0 8px 20px rgba(80,55,25,.3);cursor:pointer}
+@media (max-width:380px){.glance-cards{grid-template-columns:1fr 1fr}.glance-card:last-child{grid-column:1 / -1}}

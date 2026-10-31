@@ -1,5 +1,5 @@
-/* Olive v1.2 service worker — app-shell cache only. No data is cached by this worker; journal data lives in localStorage. */
-const CACHE = "olive-v1.2";
+/* Olive v1.3 service worker — app-shell cache only. No data is cached by this worker; journal data lives in localStorage. */
+const CACHE = "olive-v1.3";
 const SHELL = [
   "./",
   "index.html",
